@@ -299,7 +299,7 @@ def main():
                 "projected_points": round(proj_pts, 2),
                 "projected_auction_value": round(proj_dollar_value, 2),
                 "projected_value_third": round(proj_value_share, 2),
-                "keeper_value": round(keeper_value, 2),
+                "keeper_value": round(keeper_value),
                 "note": note,
             })
 
