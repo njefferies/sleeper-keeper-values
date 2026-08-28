@@ -3,16 +3,22 @@
 Sleeper Fantasy Football keeper value calculator.
 
 League formula:
-    keeper_value = last_season_drafted_or_waiver_value + (1/3 * this_season_projected_value)
+    if last_season_cost > this_season_projected_value:
+        keeper_value = last_season_cost
+    else:
+        keeper_value = min(
+            last_season_cost + (this_season_projected_value - last_season_cost) / 3,
+            this_season_projected_value,
+        )
 
 Where:
-    - "last_season_drafted_or_waiver_value" is the $ cost the player was actually
-      acquired for during LAST season: the auction-draft winning bid, or (if they
-      were picked up off waivers/free agency at any point last season) the FAAB
-      dollars spent on the most recent successful add. Trades do not change this
-      cost -- it always reflects how the player originally entered the league that
-      season. A player with no draft/waiver history last season (e.g. brand new
-      to the league) is treated as $0.
+    - "last_season_cost" is the $ cost the player was actually acquired for
+      during LAST season: the auction-draft winning bid, or (if they were
+      picked up off waivers/free agency at any point last season) the FAAB
+      dollars spent on the most recent successful add. Trades do not change
+      this cost -- it always reflects how the player originally entered the
+      league that season. A player with no draft/waiver history last season
+      (e.g. brand new to the league) is treated as $0.
     - "this_season_projected_value" is Sleeper's own $PROJ auction-value column
       from the draft room -- the actual number Sleeper itself projects each
       player would go for in a $200 auction, not a homemade estimate. Sleeper
@@ -20,6 +26,13 @@ Where:
       the draft room), so it has to be scraped once per season with the
       companion script, sleeper_scrape_draft_values.py, into a CSV that this
       script reads.
+
+    In plain terms: if last season's cost already exceeds this year's market
+    value, keeping the player is already a bad-enough deal -- leave the cost
+    as-is. Otherwise, nudge the cost up by 1/3 of the gap toward market value
+    (a "keeper tax" on holding a bargain), capped so it never exceeds market
+    value itself. A free agent (last_season_cost = 0) is simply kept at 1/3
+    of their projected auction value.
 
 Only the standard library is used here -- no `pip install` needed, just
 Python 3.8+. (The scraper companion script needs Playwright; see its own
@@ -284,7 +297,16 @@ def main():
                 proj_dollar_value = dv["dollar"]
             last_value = last_season_values.get(pid, 0.0)
             proj_value_share = proj_dollar_value / 3.0
-            keeper_value = round(last_value + proj_value_share)
+            # keeper_value starts at what the player cost last season. If
+            # that's already above this year's projected market value,
+            # keeping them is already a bad-enough deal -- leave it alone.
+            # Otherwise, nudge it up by 1/3 of the gap toward market value
+            # (a "keeper tax" for holding a bargain), capped so it never
+            # exceeds market value itself.
+            if last_value > proj_dollar_value:
+                keeper_value = round(last_value)
+            else:
+                keeper_value = round(min(last_value + (proj_dollar_value - last_value) / 3.0, proj_dollar_value))
             # How much cheaper keeping the player is than drafting them fresh
             # this year -- this year's market value minus what you'd actually
             # pay to keep them. Negative means keeping them is a worse deal
