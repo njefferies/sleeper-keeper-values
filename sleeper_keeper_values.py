@@ -296,7 +296,6 @@ def main():
                 proj_pts = dv["points"]
                 proj_dollar_value = dv["dollar"]
             last_value = last_season_values.get(pid, 0.0)
-            proj_value_share = proj_dollar_value / 3.0
             # keeper_value starts at what the player cost last season. If
             # that's already above this year's projected market value,
             # keeping them is already a bad-enough deal -- leave it alone.
@@ -307,6 +306,9 @@ def main():
                 keeper_value = round(last_value)
             else:
                 keeper_value = round(min(last_value + (proj_dollar_value - last_value) / 3.0, proj_dollar_value))
+            # How much the "keeper tax" bumped the cost up from last season's
+            # price (0 if last season's cost already exceeded market value).
+            keeper_tax = keeper_value - round(last_value)
             # How much cheaper keeping the player is than drafting them fresh
             # this year -- this year's market value minus what you'd actually
             # pay to keep them. Negative means keeping them is a worse deal
@@ -321,8 +323,8 @@ def main():
                 "last_season_cost": round(last_value, 2),
                 "projected_points": round(proj_pts, 2),
                 "projected_auction_value": round(proj_dollar_value, 2),
-                "projected_value_third": round(proj_value_share, 2),
                 "keeper_value": keeper_value,
+                "keeper_tax": keeper_tax,
                 "keeper_savings": keeper_savings,
             })
 
@@ -331,8 +333,8 @@ def main():
     with open(args.out, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=[
             "team", "player", "position", "nfl_team",
-            "last_season_cost", "projected_points", "projected_auction_value", "projected_value_third", "keeper_value",
-            "keeper_savings",
+            "last_season_cost", "projected_points", "projected_auction_value", "keeper_value",
+            "keeper_tax", "keeper_savings",
         ])
         writer.writeheader()
         writer.writerows(rows)
@@ -350,8 +352,8 @@ def main():
         top_n = players_list if not max_keepers else players_list[:max_keepers]
         for r in top_n:
             print(f"  {r['player']:<25} {r['position']:<4} "
-                  f"last=${r['last_season_cost']:<7} proj/3={r['projected_value_third']:<7} "
-                  f"=> keeper_value={r['keeper_value']:<5} savings={r['keeper_savings']}")
+                  f"last=${r['last_season_cost']:<7} market=${r['projected_auction_value']:<7} "
+                  f"=> keeper_value={r['keeper_value']:<5} (tax={r['keeper_tax']:<4} savings={r['keeper_savings']})")
         print()
 
 
