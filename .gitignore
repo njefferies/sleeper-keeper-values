@@ -1,0 +1,12 @@
+# Session cookies/localStorage -- this is effectively your Sleeper login, never commit it
+.sleeper_cache/
+
+# Generated output -- league-specific, regenerate locally instead of committing
+draft_values.csv
+keeper_values.csv
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
