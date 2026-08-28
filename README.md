@@ -4,20 +4,33 @@ Calculates fantasy football keeper values for a [Sleeper](https://sleeper.com)
 auction-draft league, using this formula:
 
 ```
-keeper_value = last_season_drafted_or_waiver_value + (1/3 * this_season_projected_value)
+if last_season_cost > this_season_projected_value:
+    keeper_value = last_season_cost
+else:
+    keeper_value = min(
+        last_season_cost + (this_season_projected_value - last_season_cost) / 3,
+        this_season_projected_value,
+    )
 ```
 
-- **`last_season_drafted_or_waiver_value`** -- the real $ cost a player was
-  acquired for last season: their winning auction bid, or (if picked up off
-  waivers/free agency at any point) the FAAB dollars spent on the most recent
-  successful add, whichever happened most recently. Trades don't reset this
-  -- it always reflects how the player originally entered the league that
-  season. Brand new players default to $0.
+- **`last_season_cost`** -- the real $ cost a player was acquired for last
+  season: their winning auction bid, or (if picked up off waivers/free
+  agency at any point) the FAAB dollars spent on the most recent successful
+  add, whichever happened most recently. Trades don't reset this -- it
+  always reflects how the player originally entered the league that season.
+  Brand new players default to $0.
 - **`this_season_projected_value`** -- Sleeper's own `$PROJ` auction-value
   column from the draft room, i.e. what Sleeper itself projects the player
   would go for in your league's auction this year. Not a home-grown estimate
   -- Sleeper doesn't expose this number through any public API, so it's
   scraped directly out of the (authenticated) draft room UI.
+
+In plain terms: if last season's cost already exceeds this year's market
+value, keeping the player is already a bad-enough deal -- leave the cost as
+is. Otherwise, nudge the cost up by 1/3 of the gap toward market value (a
+"keeper tax" on holding a bargain), capped so it never exceeds market value
+itself. A free agent (`last_season_cost = 0`) simply works out to 1/3 of
+their projected auction value.
 
 Adjust the formula in [`sleeper_keeper_values.py`](sleeper_keeper_values.py)
 if your league's rules differ.
@@ -78,10 +91,20 @@ python sleeper_scrape_draft_values.py --league-id <league_id> --out draft_values
 python sleeper_keeper_values.py --league-id <league_id> --draft-values draft_values.csv
 ```
 
-`keeper_values.csv` comes out with every rostered player's team, last
-season's cost, Sleeper's projected points and dollar value, and the final
-keeper value. It also prints each team's top keepers (up to your league's
-`max_keepers` setting) to the console.
+`keeper_values.csv` comes out with one row per rostered player:
+
+| column | meaning |
+|---|---|
+| `team`, `player`, `position`, `nfl_team` | who and where |
+| `last_season_cost` | what they cost you last season (draft bid or FAAB) |
+| `projected_points` | Sleeper's projected season-long fantasy points |
+| `projected_auction_value` | Sleeper's own `$PROJ` -- what they'd go for in this year's auction |
+| `keeper_value` | what keeping them actually costs you, per the formula above |
+| `keeper_tax` | `keeper_value - last_season_cost` -- how much the formula bumped the cost up from what you paid last year (0 if last year's cost already exceeded market value) |
+| `keeper_savings` | `projected_auction_value - keeper_value` -- how much cheaper keeping them is than drafting them fresh this year (negative means keeping them is actually a worse deal) |
+
+It also prints each team's top keepers (up to your league's `max_keepers`
+setting) to the console.
 
 ### Options
 
@@ -108,8 +131,8 @@ keeper value. It also prints each team's top keepers (up to your league's
 ## Notes & caveats
 
 - Only tested against **auction** leagues with **FAAB waivers**. A snake/linear
-  draft league would need `last_season_drafted_or_waiver_value` reworked to
-  use draft-pick value instead of auction dollars.
+  draft league would need `last_season_cost` reworked to use draft-pick
+  value instead of auction dollars.
 - Players already set as *this* year's keeper by their owner get pulled from
   the live draft pool, but the scraper turns on Sleeper's "Show Drafted"
   toggle specifically so they still get a `$PROJ` value.
