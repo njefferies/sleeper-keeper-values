@@ -265,7 +265,6 @@ def main():
     for roster in rosters:
         tname = team_name(roster)
         player_ids = roster.get("players") or []
-        already_kept = set(roster.get("keepers") or [])
         for pid in player_ids:
             info = players.get(pid) or {}
             name = info.get("full_name") or f"{info.get('first_name','')} {info.get('last_name','')}".strip() or pid
@@ -273,22 +272,24 @@ def main():
             nfl_team = info.get("team") or ""
 
             dv = draft_values.get(pid)
-            is_locked_keeper = pid in already_kept
             if dv is None:
                 # Players already locked in as *this* year's keeper pick are
                 # pulled from the live draft pool entirely, so Sleeper never
                 # renders a $PROJ for them -- that's not a missing-data bug,
-                # there's just nothing to project. Don't silently show $0.
+                # there's just nothing to project.
                 proj_pts = 0.0
                 proj_dollar_value = 0.0
-                note = "ALREADY SET AS THIS YEAR'S KEEPER -- no $PROJ available" if is_locked_keeper else "not found on draft board"
             else:
                 proj_pts = dv["points"]
                 proj_dollar_value = dv["dollar"]
-                note = ""
             last_value = last_season_values.get(pid, 0.0)
             proj_value_share = proj_dollar_value / 3.0
-            keeper_value = last_value + proj_value_share
+            keeper_value = round(last_value + proj_value_share)
+            # How much cheaper keeping the player is than drafting them fresh
+            # this year -- this year's market value minus what you'd actually
+            # pay to keep them. Negative means keeping them is a worse deal
+            # than just re-drafting them.
+            keeper_savings = round(proj_dollar_value) - keeper_value
 
             rows.append({
                 "team": tname,
@@ -299,8 +300,8 @@ def main():
                 "projected_points": round(proj_pts, 2),
                 "projected_auction_value": round(proj_dollar_value, 2),
                 "projected_value_third": round(proj_value_share, 2),
-                "keeper_value": round(keeper_value),
-                "note": note,
+                "keeper_value": keeper_value,
+                "keeper_savings": keeper_savings,
             })
 
     rows.sort(key=lambda r: (r["team"], -r["keeper_value"]))
@@ -309,7 +310,7 @@ def main():
         writer = csv.DictWriter(f, fieldnames=[
             "team", "player", "position", "nfl_team",
             "last_season_cost", "projected_points", "projected_auction_value", "projected_value_third", "keeper_value",
-            "note",
+            "keeper_savings",
         ])
         writer.writeheader()
         writer.writerows(rows)
@@ -326,10 +327,9 @@ def main():
         print(f"=== {tname} ===")
         top_n = players_list if not max_keepers else players_list[:max_keepers]
         for r in top_n:
-            flag = f"  [{r['note']}]" if r["note"] else ""
             print(f"  {r['player']:<25} {r['position']:<4} "
                   f"last=${r['last_season_cost']:<7} proj/3={r['projected_value_third']:<7} "
-                  f"=> keeper_value={r['keeper_value']}{flag}")
+                  f"=> keeper_value={r['keeper_value']:<5} savings={r['keeper_savings']}")
         print()
 
 
